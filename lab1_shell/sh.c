@@ -121,6 +121,10 @@ int gettoken(char **outptr) {
   case '|':
     type = PIPE;
     break;
+    
+   case ';':
+     type = SEMICOLON;
+     break;
 
   default:
     type = NORMAL;
@@ -169,10 +173,121 @@ void run_program(char **argv, int argc, bool foreground, bool doing_pipe) {
    *
    *
    */
+   pid_t child_pid;
+   
+
+  // Check if the specified program exists in the path
+  char* program = argv[0];
+  char program_path[1024]; // Assuming a maximum path length
+  bool program_found = false;
+  char* oldDir;
+  if (strcmp("cd", argv[0])==0) {
+    if(argc < 2){
+        oldDir = getcwd();
+        char* homedir = getenv("HOME");
+        if(chdir(homedir) == 0){
+          return;
+        }
+        else{
+          fprintf("failed to change directory");
+          return;
+        }
+    else if (argv[1] == "-"){
+      if(oldDir==null){
+         fprintf("previous directory is null");
+         return;
+      }
+      char* dir = getcwd();
+      if(chdir(oldDir) == 0){
+          oldDir = dir;
+          return;
+        }
+        else{
+          fprintf("failed to change directory");
+          return;
+        }
+    else{
+      oldDir = getcwd();
+        if(chdir(argv[1]) == 0){
+          return;
+        }
+        else{
+          fprintf("failed to change directory");
+          return;
+        }
+    }
+  }
+  if (program[0] == '/') {
+    // Explicit path provided, use it directly
+    strncpy(program_path, program, sizeof(program_path));
+    program_path[sizeof(program_path) - 1] = '\0';
+
+    // Check if the program file is accessible and executable
+    if (access(program_path, X_OK) == 0) {
+      program_found = true;
+    }
+  } else {
+    // Search for the program in directories listed in $PATH
+    list_t *path_entry = path_dir_list;
+    do {
+      snprintf(program_path, sizeof(program_path), "%s/%s", (char *)path_entry->data, program);
+      program_path[sizeof(program_path) - 1] = '\0';
+
+      // Check if the program file is accessible and executable
+      if (access(program_path, X_OK) == 0) {
+        program_found = true;
+        break; // Program found, break the loop
+      }
+
+      path_entry = path_entry->succ;
+    } while (path_entry != path_dir_list);
+  }
+
+  if (!program_found) {
+    fprintf(stderr, "Program '%s' not found or not executable.\n", program);
+    return;
+  }
+
+  child_pid = fork();
+  if (child_pid == -1) {
+    perror("Fork failed");
+    exit(EXIT_FAILURE);
+  } else if (child_pid == 0) {
+    // Child process
+
+    if (input_fd != 0) {
+      // Redirect standard input to the input file descriptor
+      dup2(input_fd, STDIN_FILENO);
+      close(input_fd);
+    }
+
+    if (output_fd != 0) {
+      // Redirect standard output to the output file descriptor
+      dup2(output_fd, STDOUT_FILENO);
+      close(output_fd);
+    }
+
+    // Execute the program with its full path
+    execv(program_path, argv);
+
+    // If execv fails, report the error and exit
+    perror("Exec failed");
+    exit(EXIT_FAILURE);
+  } else {
+    // Parent process
+    if (foreground) {
+      int status;
+      waitpid(child_pid, &status, 0);
+      if (WIFEXITED(status)) {
+        int exit_code = WEXITSTATUS(status);
+        printf("Program exited with status code %d\n", exit_code);
+      }
+    }
+  }
 }
 
 void parse_line(void) {
-  char *argv[MAX_ARG + 1];
+  char* argv[MAX_ARG + 1];
   int argc;
   //	int		pipe_fd[2];	/* 1 for producer and 0 for consumer. */
   token_type_t type;
