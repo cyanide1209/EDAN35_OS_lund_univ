@@ -173,50 +173,53 @@ void run_program(char **argv, int argc, bool foreground, bool doing_pipe) {
    *
    *
    */
-   pid_t child_pid;
+  pid_t child_pid;
    
 
   // Check if the specified program exists in the path
   char* program = argv[0];
   char program_path[1024]; // Assuming a maximum path length
   bool program_found = false;
-  char* oldDir;
-  if (strcmp("cd", argv[0])==0) {
-    if(argc < 2){
-        oldDir = getcwd();
-        char* homedir = getenv("HOME");
-        if(chdir(homedir) == 0){
-          return;
-        }
-        else{
-          fprintf("failed to change directory");
-          return;
-        }
-    else if (argv[1] == "-"){
-      if(oldDir==null){
-         fprintf("previous directory is null");
-         return;
-      }
-      char* dir = getcwd();
-      if(chdir(oldDir) == 0){
-          oldDir = dir;
-          return;
-        }
-        else{
-          fprintf("failed to change directory");
-          return;
-        }
-    else{
-      oldDir = getcwd();
-        if(chdir(argv[1]) == 0){
-          return;
-        }
-        else{
-          fprintf("failed to change directory");
-          return;
-        }
-    }
-  }
+  // char* oldDir = NULL;
+  // if (strcmp("cd", argv[0])==0) {
+  //   if(argc < 2){
+  //     oldDir = getcwd(oldDir, 1024);
+  //     char* homedir = getenv("HOME");
+  //     if(chdir(homedir) == 0){
+  //       return;
+  //     }
+  //     else{
+  //       printf("failed to change directory");
+  //       return;
+  //     }
+  //   }
+  //   else if (strcmp(argv[1],"-")==0){
+  //     if(oldDir==NULL){
+  //        printf("previous directory is null");
+  //        return;
+  //     }
+  //     char* dir = NULL;
+  //     getcwd(dir, 1024);
+  //     if(chdir(oldDir) == 0){
+  //       oldDir = dir;
+  //       return;
+  //     }
+  //     else{
+  //       printf("failed to change directory");
+  //       return;
+  //     }
+  //   }
+  //   else{
+  //     getcwd(oldDir, 1024);
+  //       if(chdir(argv[1]) == 0){
+  //         return;
+  //       }
+  //       else{
+  //         printf("failed to change directory");
+  //         return;
+  //       }
+  //   }
+  // }
   if (program[0] == '/') {
     // Explicit path provided, use it directly
     strncpy(program_path, program, sizeof(program_path));
