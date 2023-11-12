@@ -180,46 +180,38 @@ void run_program(char **argv, int argc, bool foreground, bool doing_pipe) {
   char* program = argv[0];
   char program_path[1024]; // Assuming a maximum path length
   bool program_found = false;
-  // char* oldDir = NULL;
-  // if (strcmp("cd", argv[0])==0) {
-  //   if(argc < 2){
-  //     oldDir = getcwd(oldDir, 1024);
-  //     char* homedir = getenv("HOME");
-  //     if(chdir(homedir) == 0){
-  //       return;
-  //     }
-  //     else{
-  //       printf("failed to change directory");
-  //       return;
-  //     }
-  //   }
-  //   else if (strcmp(argv[1],"-")==0){
-  //     if(oldDir==NULL){
-  //        printf("previous directory is null");
-  //        return;
-  //     }
-  //     char* dir = NULL;
-  //     getcwd(dir, 1024);
-  //     if(chdir(oldDir) == 0){
-  //       oldDir = dir;
-  //       return;
-  //     }
-  //     else{
-  //       printf("failed to change directory");
-  //       return;
-  //     }
-  //   }
-  //   else{
-  //     getcwd(oldDir, 1024);
-  //       if(chdir(argv[1]) == 0){
-  //         return;
-  //       }
-  //       else{
-  //         printf("failed to change directory");
-  //         return;
-  //       }
-  //   }
-  // }
+  if (strcmp("cd", program)==0) {
+    char *oldDir = getcwd(NULL, 0);
+
+    if (argc < 2) {
+      // Handle 'cd' without arguments (change to the home directory)
+      char *homedir = getenv("HOME");
+      if (homedir == NULL) {
+        fprintf(stderr, "cd: HOME not set\n");
+      } else if (chdir(homedir) != 0) {
+        perror("cd failed");
+      }
+    } 
+    else if (strcmp(argv[1], "-") == 0) {
+      if (oldDir == NULL) {
+        error("parent: no previous working directory found");
+        exit(EXIT_FAILURE);
+      }
+      chdir(oldDir);
+      printf("%s\n", oldDir);
+      strcpy(oldDir, program_path);
+    } 
+    else if (chdir(argv[1]) == 0) {
+      printf("switched to dir: %s",argv[1]);
+      strcpy(oldDir,program_path);
+    } 
+    else {
+        error("parent: failed to switch dir: %s by using %s", argv[1], program);
+        exit(EXIT_FAILURE);
+    }
+    return;
+  }
+
   if (program[0] == '/') {
     // Explicit path provided, use it directly
     strncpy(program_path, program, sizeof(program_path));
