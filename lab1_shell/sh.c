@@ -183,7 +183,7 @@ void run_program(char **argv, int argc, bool foreground, bool doing_pipe) {
   char* oldDir = NULL;
   if (strcmp("cd", program)==0) {
     char * temp = NULL;
-    temp = getcwd(NULL,0);
+    temp = getcwd(NULL,0); //this line???
 		if(strcmp(argv[1], "-") == 0){
       if (oldDir == NULL) {
         printf("parent: no previous working directory found");
