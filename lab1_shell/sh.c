@@ -180,37 +180,61 @@ void run_program(char **argv, int argc, bool foreground, bool doing_pipe) {
   char* program = argv[0];
   char program_path[1024]; // Assuming a maximum path length
   bool program_found = false;
+  char* oldDir = NULL;
   if (strcmp("cd", program)==0) {
-    char *oldDir = getcwd(NULL, 0);
-
-    if (argc < 2) {
-      // Handle 'cd' without arguments (change to the home directory)
-      char *homedir = getenv("HOME");
-      if (homedir == NULL) {
-        fprintf(stderr, "cd: HOME not set\n");
-      } else if (chdir(homedir) != 0) {
-        perror("cd failed");
-      }
-    } 
-    else if (strcmp(argv[1], "-") == 0) {
+    char * temp = NULL;
+    temp = getcwd(NULL,0);
+		if(strcmp(argv[1], "-") == 0){
       if (oldDir == NULL) {
-        error("parent: no previous working directory found");
-        exit(EXIT_FAILURE);
+        printf("parent: no previous working directory found");
+        return;
       }
-      chdir(oldDir);
-      printf("%s\n", oldDir);
-      strcpy(oldDir, program_path);
-    } 
-    else if (chdir(argv[1]) == 0) {
-      printf("switched to dir: %s",argv[1]);
-      strcpy(oldDir,program_path);
-    } 
-    else {
-        error("parent: failed to switch dir: %s by using %s", argv[1], program);
-        exit(EXIT_FAILURE);
-    }
-    return;
+      if(chdir(oldDir)!= 0){
+        printf("cd failed");
+      }
+			oldDir = temp;
+						
+		}
+		else if(chdir(argv[1]) != 0){
+			error("could not change dir");		
+	
+		}
+    else{
+			oldDir = temp;
+		}
   }
+
+  //   if (argc < 2) {
+  //     // Handle 'cd' without arguments (change to the home directory)
+  //     oldDir = 
+  //     char *homedir = getenv("HOME");
+  //     if (homedir == NULL) {
+  //       fprintf(stderr, "cd: HOME not set\n");
+  //     } else if (chdir(homedir) != 0) {
+  //       printf("cd failed");
+  //     }
+  //   } 
+  //   else if (strcmp(argv[1], "-") == 0) {
+  //     if (oldDir == NULL) {
+  //       printf("parent: no previous working directory found");
+  //       return;
+  //     }
+  //     if(chdir(oldDir)!= 0){
+  //       printf("cd failed");
+  //     }
+  //     printf("%s\n", oldDir);
+  //     strcpy(oldDir, program_path);
+  //   } 
+  //   else if (chdir(argv[1]) == 0) {
+  //     printf("switched to dir: %s",argv[1]);
+  //     strcpy(argv[1],program_path);
+  //   } 
+  //   else {
+  //       printf("parent: failed to switch dir: %s by using %s", argv[1], program);
+  //       return;
+  //   }
+  //   return;
+  // }
 
   if (program[0] == '/') {
     // Explicit path provided, use it directly
