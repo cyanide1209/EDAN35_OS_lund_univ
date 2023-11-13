@@ -192,12 +192,10 @@ void run_program(char **argv, int argc, bool foreground, bool doing_pipe) {
       if(chdir(oldDir)!= 0){
         printf("cd failed");
       }
-			oldDir = temp;
-						
+			oldDir = temp;	
 		}
 		else if(chdir(argv[1]) != 0){
 			error("could not change dir");		
-	
 		}
     else{
 			oldDir = temp;
@@ -280,7 +278,7 @@ void run_program(char **argv, int argc, bool foreground, bool doing_pipe) {
       close(input_fd);
     }
 
-    if (output_fd != 0) {
+    if (output_fd != 1) {
       // Redirect standard output to the output file descriptor
       dup2(output_fd, STDOUT_FILENO);
       close(output_fd);
@@ -312,9 +310,10 @@ void parse_line(void) {
   token_type_t type;
   bool foreground;
   bool doing_pipe;
+  int pipe_fd[2];
 
   input_fd = 0;
-  output_fd = 0;
+  output_fd = 1;
   argc = 0;
 
   for (;;) {
@@ -358,7 +357,11 @@ void parse_line(void) {
 
     case PIPE:
       doing_pipe = true;
-
+      if(pipe(pipe_fd) ==-1){
+				error("pipe failed");
+				return;
+			}
+			output_fd = pipe_fd[1];
       /*FALLTHROUGH*/
 
     case AMPERSAND:
@@ -376,9 +379,14 @@ void parse_line(void) {
 
       run_program(argv, argc, foreground, doing_pipe);
 
-      input_fd = 0;
-      output_fd = 0;
-      argc = 0;
+      if(doing_pipe){
+				input_fd = pipe_fd[0];
+				close(pipe_fd[1]);
+			}else{
+				input_fd = 0;
+			}
+			output_fd = 1;
+			argc = 0;
 
       if (type == NEWLINE)
         return;
