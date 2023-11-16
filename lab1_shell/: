@@ -33,9 +33,8 @@ static char token_buf[2 * MAXBUF]; /* tokens are placed here. */
 static char *input_char;           /* next character to check. */
 static char *token;                /* a token such as /bin/ls */
 
-static char oldDir[PATH_MAX];
-static char temp[PATH_MAX];
-static char cwd[PATH_MAX];
+static char *oldDir;
+static char *temp;
 static list_t *path_dir_list; /* list of directories in PATH. */
 static int input_fd;          /* for i/o redirection or pipe. */
 static int output_fd;         /* for i/o redirection or pipe */
@@ -178,7 +177,6 @@ void run_program(char **argv, int argc, bool foreground, bool doing_pipe) {
    *
    */
   pid_t child_pid;
-  
    
 
   // Check if the specified program exists in the path
@@ -186,32 +184,26 @@ void run_program(char **argv, int argc, bool foreground, bool doing_pipe) {
   char program_path[1024]; // Assuming a maximum path length
   bool program_found = false;
   if (strcmp("cd", program)==0) {
-    
-    //temp = getcwd(cwd, sizeof(cwd)); //this line???
+    char cwd[PATH_MAX];
+    temp = getcwd(cwd, sizeof(cwd)); //this line???
     if(strcmp(argv[1], "-") == 0){
       if (oldDir == NULL) {
         printf("parent: no previous working directory found");
         return;
       }
-      getcwd(cwd, sizeof(cwd));
-      strcpy(temp,cwd);	
       if(chdir(oldDir)!= 0){
         printf("cd failed");
-        return;
+	return;
       }
-      chdir(oldDir);
-      strcpy(oldDir,temp);
-      fprintf(stderr,"%s\n",getcwd(cwd, sizeof(cwd)));	
-      return;
+	oldDir = temp;
+	fprintf(stderr,"%s",getcwd(cwd, sizeof(cwd)));	
+	return;
     }
-    getcwd(cwd, sizeof(cwd));
-    strcpy(temp,cwd);
     if(chdir(argv[1]) != 0){
-	    error("could not change dir");
-	    return;	
+	error("could not change dir");
+	return;	
     }
-    strcpy(oldDir,temp);
-    fprintf(stderr,"%s\n",getcwd(cwd, sizeof(cwd)));	
+    oldDir = temp;
     return;
   }
 
@@ -246,8 +238,7 @@ void run_program(char **argv, int argc, bool foreground, bool doing_pipe) {
   //   }
   //   return;
   // }
-  int status;
-  waitpid(0, &status, WNOHANG);
+
   if (program[0] == '/') {
     // Explicit path provided, use it directly
     strncpy(program_path, program, sizeof(program_path));
@@ -310,8 +301,8 @@ void run_program(char **argv, int argc, bool foreground, bool doing_pipe) {
       int status;
       waitpid(child_pid, &status, 0);
       if (WIFEXITED(status)) {
-        //int exit_code = WEXITSTATUS(status);
-        //printf("Program exited with status code %d\n", exit_code);
+        int exit_code = WEXITSTATUS(status);
+        printf("Program exited with status code %d\n", exit_code);
       }
     }
   }
