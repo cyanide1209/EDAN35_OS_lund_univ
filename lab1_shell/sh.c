@@ -247,7 +247,7 @@ void run_program(char **argv, int argc, bool foreground, bool doing_pipe) {
   //   return;
   // }
   int status;
-  waitpid(0, &status, WNOHANG);
+  while (waitpid(0, &status, WNOHANG) > 0) ;
   if (program[0] == '/') {
     // Explicit path provided, use it directly
     strncpy(program_path, program, sizeof(program_path));
