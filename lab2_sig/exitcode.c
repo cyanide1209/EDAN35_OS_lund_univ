@@ -21,8 +21,8 @@ int main(int argc, char *argv[]) {
     if (pid == 0) {
         char *args[] = {program, NULL};
         execv(program, args);
-        perror("execv"); // Print an error message if execv fails
-        exit(EXIT_FAILURE); // Exit the child process with a failure status
+        perror("execv"); 
+        exit(EXIT_FAILURE); 
     } else {
         printf("pid:\t\t\t%d\n", pid);
 
