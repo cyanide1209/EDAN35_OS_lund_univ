@@ -111,41 +111,95 @@ static unsigned new_swap_page() {
 }
 
 static unsigned fifo_page_replace() {
-  int page;
+  static int page = -1;
 
-  page = INT_MAX;
+  page += 1;
+  page %= RAM_PAGES;
 
   assert(page < RAM_PAGES);
-  /* TO COMPLETE */
+  
   return page;
 }
 
 static unsigned second_chance_replace() {
-  int page;
+  static int page = -1;
+  coremap_entry_t* entry;
 
-  page = INT_MAX;
+  while (true) {
+    page += 1;
+    page %= RAM_PAGES;
+    
+    assert(page < RAM_PAGES);
+    
+    entry = &coremap[page];
+    if (entry->owner == NULL || !entry->owner->referenced) {
+      break;
+    }
+    entry->owner->referenced = 0;   
+  }
 
-  assert(page < RAM_PAGES);
-  /* TO COMPLETE */
   return page;
 }
 
 /* TO COPLETE */
 static unsigned take_phys_page() {
   unsigned page; /* Page to be replaced. */
+  coremap_entry_t* entry;
 
   page = (*replace)();
+  entry = &coremap[page];
 
+  if (entry->owner == NULL) {
+    return page;
+  }
+
+  if (entry->owner->ondisk) {
+    if (entry->owner->modified) {
+      write_page(page, entry->page);
+    }
+    entry->owner->page = entry->page;
+  } else {
+    unsigned swap = new_swap_page();
+    entry->owner->page = swap;
+    write_page(page, swap);
+  }
+
+  entry->owner->inmemory = 0;
+  entry->owner->ondisk = 1;
+  entry->owner->modified = 0;
+  entry->owner->referenced = 0;
   return page;
 }
 
 static void pagefault(unsigned virt_page) {
   unsigned page;
 
+  page_table_entry_t* new_page;
+  coremap_entry_t* entry;
+  
   num_pagefault += 1;
 
   page = take_phys_page();
-  /* TO COMPLETE */
+  new_page = &page_table[virt_page];
+  entry = &coremap[page];
+  
+  if(new_page->ondisk) {
+    entry->page = new_page->page;
+    read_page(page, new_page->page);
+  }
+
+  new_page->inmemory = 1;
+  new_page->page = page;
+  entry->owner = new_page;
+
+  // printf("MEMORY:\n");
+  // for (size_t i = 0; i < RAM_PAGES; ++i) {
+  //   printf("%lu: %d", i, page_memory[i]);
+  //   if (i == page) printf("\t<- %u", virt_page);
+  //   printf("\n");
+  // }
+
+  // page_memory[page] = virt_page;
 }
 
 static void translate(unsigned virt_addr, unsigned *phys_addr, bool write) {
