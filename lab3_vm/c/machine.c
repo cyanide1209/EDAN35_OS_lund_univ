@@ -70,6 +70,9 @@ static unsigned (*replace)(void);             /* Page repl. alg. */
 
 int x;
 
+int diskWrites = 0;
+int *optArray;
+
 unsigned make_instr(unsigned opcode, unsigned dest, unsigned s1, unsigned s2) {
   return (opcode << 26) | (dest << 21) | (s1 << 16) | (s2 & 0xffff);
 }
@@ -95,11 +98,13 @@ void error(char *fmt, ...) {
 static void read_page(unsigned phys_page, unsigned swap_page) {
   memcpy(&memory[phys_page * PAGESIZE], &swap[swap_page * PAGESIZE],
          PAGESIZE * sizeof(unsigned));
+  //printf("( page number read %u )\n",swap_page);
 }
 
 static void write_page(unsigned phys_page, unsigned swap_page) {
   memcpy(&swap[swap_page * PAGESIZE], &memory[phys_page * PAGESIZE],
          PAGESIZE * sizeof(unsigned));
+  //printf("( page number writen %u )\n",phys_page);
 }
 
 static unsigned new_swap_page() {
@@ -141,7 +146,11 @@ static unsigned second_chance_replace() {
   return page;
 }
 
-/* TO COPLETE */
+static unsigned optimal_replace() {
+	return 1;
+}
+
+
 static unsigned take_phys_page() {
   unsigned page; /* Page to be replaced. */
   coremap_entry_t* entry;
@@ -192,14 +201,14 @@ static void pagefault(unsigned virt_page) {
   new_page->page = page;
   entry->owner = new_page;
 
-  // printf("MEMORY:\n");
-  // for (size_t i = 0; i < RAM_PAGES; ++i) {
+ // printf("MEMORY:\n");
+ // for (size_t i = 0; i < RAM_PAGES; ++i) {
   //   printf("%lu: %d", i, page_memory[i]);
   //   if (i == page) printf("\t<- %u", virt_page);
   //   printf("\n");
   // }
 
-  // page_memory[page] = virt_page;
+//   page_memory[page] = virt_page;
 }
 
 static void translate(unsigned virt_addr, unsigned *phys_addr, bool write) {
@@ -208,6 +217,15 @@ static void translate(unsigned virt_addr, unsigned *phys_addr, bool write) {
 
   virt_page = virt_addr / PAGESIZE;
   offset = virt_addr & (PAGESIZE - 1);
+  printf("(%u)",virt_page);
+  //int j =0;
+  //for (j = 0;j<100;j++){
+//	  if (optArray[j] == NULL){
+//		  optArray[j] = virt_page;
+//		  break;
+//	}
+//}
+
 
   if (!page_table[virt_page].inmemory)
     pagefault(virt_page);
@@ -234,6 +252,7 @@ static void write_memory(unsigned *memory, unsigned addr, unsigned data) {
   translate(addr, &phys_addr, true);
 
   memory[phys_addr] = data;
+  diskWrites++;
 }
 
 void read_program(char *file, unsigned memory[], int *ninstr) {
@@ -485,6 +504,9 @@ int main(int argc, char **argv) {
     } else if (!strcmp(argv[1], "--fifo")) {
       replace = fifo_page_replace;
       printf("FIFO page replacement algorithm.\n");
+    } else if (!strcmp(argv[1], "--optimal")){
+      replace = optimal_replace;
+      printf("Optimal page replacement algorithm.\n");
     } else {
       printf("Unknown page replacement algorithm.\n");
       return -1;
@@ -497,4 +519,9 @@ int main(int argc, char **argv) {
   run(argc, argv);
 
   printf("%llu page faults\n", num_pagefault);
+  printf("%d disk writes\n", diskWrites);
+ // int k;
+  //for (k = 0; k <  100; k++){
+//	  printf("%u", optArray[k]);
+//}
 }

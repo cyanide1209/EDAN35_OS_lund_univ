@@ -9,6 +9,8 @@ run-fifo : machine
 
 run-sc : machine
 	./machine --second-chance fac.s
+run-or : machine
+	./machine --optimal fac.s
 
 run-all : run-fifo run-sc
 
