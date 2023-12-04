@@ -12,7 +12,7 @@ run-sc : machine
 run-or : machine
 	./machine --optimal fac.s
 
-run-all : run-fifo run-sc
+run-all : run-fifo run-sc run-or
 
 clean :
 	rm -f machine

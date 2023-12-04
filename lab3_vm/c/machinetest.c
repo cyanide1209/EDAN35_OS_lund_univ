@@ -72,11 +72,13 @@ static unsigned page_accesses[256];
 static bool trace = true;
 static int page_memory[RAM_PAGES];
 static unsigned long long current_access;
+static unsigned long long num_diskwrites;
 static unsigned long long num_access;
+
 
 int x;
 
-static unsigned long long diskWrites;
+int diskWrites = 0;
 int *optArray;
 
 unsigned make_instr(unsigned opcode, unsigned dest, unsigned s1, unsigned s2) {
@@ -110,7 +112,6 @@ static void read_page(unsigned phys_page, unsigned swap_page) {
 static void write_page(unsigned phys_page, unsigned swap_page) {
   memcpy(&swap[swap_page * PAGESIZE], &memory[phys_page * PAGESIZE],
          PAGESIZE * sizeof(unsigned));
-  diskWrites++;
   //printf("( page number writen %u )\n",phys_page);
 }
 
@@ -154,36 +155,34 @@ static unsigned second_chance_replace() {
 }
 
 static unsigned find_furthest_page() {
-  unsigned long long page;
+  unsigned page;
   unsigned furthest_pos = 0;
   unsigned furthest_page = 0;
 
-  for (size_t index = 0; index <= RAM_PAGES; index++) {
-    printf("RAM_PAGES: %d\n", RAM_PAGES);
-    printf("index: %lu\n", index);
+  for (size_t index = 0; index < RAM_PAGES; index++) {
     page = page_memory[index];
-    printf("current_access: %llu\n", current_access);
+
     for (size_t access = current_access - 1; access < num_access; access++) {
       if (access == num_access - 1 && page_accesses[access] != page) {
-        printf("line 165:");
+        // printf("debug: index %lu had pos %lu... end of array!\n", index, access);
         return index;
       }
-      if(access>209){
-        printf("access: %lu\n", access);
-      }
+      
       if (page_accesses[access] == page) {
-        printf("access: %lu\n", access);
+        // printf("debug: index %lu had pos %lu... ", index, access);
         if(access < furthest_pos) {
+          // printf("not longest\n");
           break;
         }
+
+        // printf("longer!\n");
         furthest_page = page;
         furthest_pos = access;
         break;
       }
     }
   }
-  printf("Hi");
-  printf("furthest page: %u\n", furthest_page);
+
   return furthest_page;
 }
 
@@ -191,11 +190,9 @@ static unsigned optimal_replace() {
   for (size_t i = 0; i < RAM_PAGES; ++i) {
     if (page_memory[i] == -1) return i;
   }
-  printf("Furthest page: %u\n", find_furthest_page());
+
   return find_furthest_page();
 }
-
-//segmenation fault is somewhere ^^^
 
 
 static unsigned take_phys_page() {
@@ -232,8 +229,6 @@ static void pagefault(unsigned virt_page) {
 
   page_table_entry_t* new_page;
   coremap_entry_t* entry;
-  
-  num_pagefault += 1;
 
   page = take_phys_page();
   new_page = &page_table[virt_page];
@@ -248,14 +243,12 @@ static void pagefault(unsigned virt_page) {
   new_page->page = page;
   entry->owner = new_page;
 
- // printf("MEMORY:\n");
- // for (size_t i = 0; i < RAM_PAGES; ++i) {
-  //   printf("%lu: %d", i, page_memory[i]);
-  //   if (i == page) printf("\t<- %u", virt_page);
-  //   printf("\n");
-  // }
+  // printf("MEMORY: [%u] = %u\n", page, virt_page);
+  // page_memory[page] = virt_page;
 
-  page_memory[page] = virt_page;
+  // for (size_t i = 0; i < RAM_PAGES; ++i) {
+  //   printf("%lu: %d\n", i, page_memory[i]);
+  //}
 }
 
 static void translate(unsigned virt_addr, unsigned *phys_addr, bool write) {
@@ -264,15 +257,12 @@ static void translate(unsigned virt_addr, unsigned *phys_addr, bool write) {
 
   virt_page = virt_addr / PAGESIZE;
   offset = virt_addr & (PAGESIZE - 1);
-
-  // current_access += 1;
   if (trace) {
-    page_accesses[num_access] = virt_page;
-    num_access += 1;
+    page_accesses[accesses] = virt_page;
+    accesses += 1;
   }
 
-  // printf("access [%llu]: %u\n", current_access, virt_page);
-
+  printf("(%u)",virt_page);
   if (!page_table[virt_page].inmemory)
     pagefault(virt_page);
 
@@ -298,6 +288,7 @@ static void write_memory(unsigned *memory, unsigned addr, unsigned data) {
   translate(addr, &phys_addr, true);
 
   memory[phys_addr] = data;
+  diskWrites++;
 }
 
 void read_program(char *file, unsigned memory[], int *ninstr) {
@@ -542,20 +533,15 @@ int run(int argc, char **argv) {
 
 int main(int argc, char **argv) {
   replace = fifo_page_replace;
-  accesses = 0;
-  diskWrites = 0;
   if (argc >= 2) {
     if (!strcmp(argv[1], "--second-chance")) {
       replace = second_chance_replace;
-      trace = true;
       printf("Second change page replacement algorithm.\n");
     } else if (!strcmp(argv[1], "--fifo")) {
       replace = fifo_page_replace;
-      trace = true;
       printf("FIFO page replacement algorithm.\n");
-    } else if (!strcmp(argv[1], "--optimal")) {
+    } else if (!strcmp(argv[1], "--optimal")){
       replace = optimal_replace;
-      trace = false;
       printf("Optimal page replacement algorithm.\n");
     } else {
       printf("Unknown page replacement algorithm.\n");
@@ -566,42 +552,18 @@ int main(int argc, char **argv) {
     return -1;
   }
 
+  run(argc, argv);
 
-    if (!trace) {
-    FILE *fp = fopen("trace", "r");   
-    if(fp) {
-      fscanf(fp, "%llu", &num_access);
-        for (size_t i = 0; i < num_access; i++) {
-          fscanf(fp, "%u", &page_accesses[i]);
-        }
+  printf("%llu page faults\n", num_pagefault);
+  printf("%d disk writes\n", diskWrites);
 
-        fclose(fp);
-      } else {
-        printf("trace-file missing\n");
-        return 1;
-      }
-    }
+  // printf("\n----optimal----\n\n");
+  // replace = optimal_replace;
+  // num_pagefault = 0;
+  // num_diskWrites = 0;
+  // trace = false;
+  // run(argc, argv);
 
-    for (size_t i = 0; i < RAM_PAGES; i++) {
-      page_memory[i] = -1;
-    }
-
-    run(argc, argv);
-
-    printf("%llu page faults\n", num_pagefault);
-    printf("%llu disk writes\n", diskWrites);
-
-    if (trace) {
-    FILE *fp = fopen("trace", "w");   
-      if(fp) {
-        fprintf(fp, "%llu\n", num_access);
-        for (size_t i = 0; i < num_access; i++) {
-          fprintf(fp, "%u", page_accesses[i]);
-          if (i < num_access - 1) fprintf(fp, "\n");
-        }
-        fclose(fp);
-      }
-    }
-
-    return 0;
+  // printf("%llu page faults\n", num_pagefault);
+  // printf("%llu disk writes\n", num_diskwrites);
 }
