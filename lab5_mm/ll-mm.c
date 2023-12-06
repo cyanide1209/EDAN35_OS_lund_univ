@@ -196,6 +196,20 @@ static void merge_blocks(block* pb) {
 */
 void free(void* ptr) {
   /* TODO: Implement this */
+  
+  block* pntblck;
+  pntblck = find_block(ptr);
+  if (pntblck == NULL){
+    return; 
+  } else if (pntblck->is_free){
+    return;
+  }
+  pntblck->is_free = 1;
+  int size;
+  size = block_total_size(pntblck);
+  sbrk(-size);
+  return;
+
 }
 
 /*
@@ -206,7 +220,15 @@ void free(void* ptr) {
 */
 void* malloc(size_t size) {
   /* TODO: Implement this */
-  return NULL;
+  block* p;
+  p = first;
+  while(p != NULL)
+  block* block_ptr = new_block(size);
+  //find old block'
+  //old block-> next = blockptr
+  block_ptr->is_free=1;
+  return block_to_data(block_ptr);
+  
 }
 
 /*
@@ -257,6 +279,22 @@ void* calloc(size_t nitems, size_t item_size) {
        moved, a free(ptr) is done.
 */
 void* realloc(void* ptr, size_t size) {
-  /* TODO: Implement this */
-  return NULL;
+   
+  if (ptr == NULL) {
+    return malloc(size);
+  }
+
+  block* block_ptr = find_block(ptr);
+  if (block_total_size(block_ptr) >= size) {
+    return ptr;
+  }
+
+  void* new_ptr;
+  new_ptr = malloc(size);
+  if (new_ptr == NULL) {
+    return NULL; 
+  }
+  memcpy(new_ptr, ptr, block_total_size(block_ptr));
+  free(ptr);
+  return new_ptr;
 }
