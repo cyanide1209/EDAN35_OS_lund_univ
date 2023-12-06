@@ -157,22 +157,23 @@ static unsigned find_furthest_page() {
   unsigned furthest_pos = 0;
   unsigned furthest_page = 0;
 
-  for (size_t index = 0; index <= RAM_PAGES; index++) {
-    page = page_memory[index];
-    for (size_t access = current_access - 1; access < num_access; access++) {
-      if (access == num_access - 1 && page_accesses[access] != page) {
-        printf("index: %lu\n", index);
-        return index;
-      }
+  for (size_t index = 0; index < RAM_PAGES; index++) {
+    page = coremap[index].owner - page_table;
+    for (size_t access = current_access; access < num_access; access++) {
       if (page_accesses[access] == page) {
         printf("access: %lu\n", access);
         printf("furthest_pos: %u\n", furthest_pos);
         if(access < furthest_pos) {
           break;
         }
-        furthest_page = page;
+        furthest_page = index;
         furthest_pos = access;
         break;
+      }
+      //case where page is never used again
+      if (access == num_access-1) {
+        printf("index: %lu\n", index);
+        return index;
       }
     }
   }
@@ -182,7 +183,9 @@ static unsigned find_furthest_page() {
 
 static unsigned optimal_replace() {
   for (size_t i = 0; i < RAM_PAGES; ++i) {
-    if (page_memory[i] == -1) return i;
+    if (coremap[i].owner == NULL){
+      return i;
+    }
   }
   return find_furthest_page();
 }

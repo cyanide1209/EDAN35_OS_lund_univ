@@ -93,10 +93,11 @@ static int do_getattr(const char *path, struct stat *st) {
 			}
     } else {
       printf("  -- find_dir_entry cannot find %s\n", fn);
-      
+      save_directory();
       // this could be a new file. let it through?
       return -ENOENT; // no such file or dir
     }
+    save_directory();
   }
 
   return 0;
@@ -161,6 +162,25 @@ static int do_read(const char *path, char *buffer, size_t size, off_t offset,
   dir_entry *de = index2dir_entry(di);
   unsigned bid = de->first_block;
 
+  // load the block map
+	unsigned short* bmap = load_blockmap();
+	// first figure out where the write starts (offset in blocks)
+	unsigned short blkoffs = offset/BLOCK_SIZE;
+	// offset within that block
+	unsigned short byteoffs = offset%BLOCK_SIZE;
+
+	while(blkoffs) {
+		// not yet in the right block.
+		if(bmap[bid] != EOF_BLOCK) {
+			// follow the link
+			bid = bmap[bid];
+		} else {
+			printf("File shorter than %ld bytes\n", offset);
+			return -1;
+		}
+		blkoffs--;
+	}
+
   char bcache[BLOCK_SIZE];
   // ... //
   // reads the block into the cache
@@ -174,7 +194,7 @@ static int do_read(const char *path, char *buffer, size_t size, off_t offset,
   // of this file until the block holding the right offset. Have a look at
   // do_write.
 
-  memcpy(buffer, bcache, rsize);
+  memcpy(buffer, bcache+byteoffs, rsize);
 
   // how much did we read?
   return rsize;
@@ -194,6 +214,7 @@ static int do_write(const char *path, const char *buffer, size_t size,
   // let's figure out the dir entry for the path
   load_directory();
   int di = find_dir_entry(fn);
+
   if (di < 0) { // no such file
     printf("    no such file\n");
     return -ENOENT;
@@ -219,7 +240,8 @@ static int do_write(const char *path, const char *buffer, size_t size,
     }
     // update the size of the file
     de->size_bytes = offset + size;
-    de->modtime = time( NULL );
+    alloc_block(1);
+    de->modtime = time(NULL);
 
 
     // flush back the directory, since the file info changed
@@ -327,17 +349,19 @@ static int do_truncate(const char *path, off_t offset) {
     printf("  > file exits. truncate it.");
 
     dir_entry *de = index2dir_entry(di);
-    de->size_bytes = 0;
+    de->size_bytes = offset;
 
     // TODO: [TRUNC_FREE] also free the blocks of this file!
     load_blockmap();
+    //unsigned short* bmap = load_blockmap();
+    //de->first_block = bmap[offset];
     while(de->first_block != EOF_BLOCK) {
     	de->first_block = free_block(de->first_block);
     }
     save_blockmap();
 
     // for now just cut loose all blocks! block leak!
-    //de->first_block = EOF_BLOCK;
+    de->first_block = EOF_BLOCK;
     // must save directory changes to disk!
     save_directory();
   }
