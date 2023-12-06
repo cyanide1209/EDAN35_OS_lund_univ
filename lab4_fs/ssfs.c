@@ -5,8 +5,8 @@
 
 /*
  Overview of tasks:
-       [DIR_ENTRY] : add modification time to the directory entry and handle it
- right [LARGE_DIR] : allow the directory to grow over the one block limit (still
+       [DIR_ENTRY] : add modification time to the directory entry and handle it right 
+        [LARGE_DIR] : allow the directory to grow over the one block limit (still 
  flat) [READ_OFFSET] : correctly implement reading with offset in do_read
        [LARGE_WRITE] : modify do_write to allow writing more than one block
        [TRUNC_FREE] : correctly free the blocks of a file being truncated
@@ -28,12 +28,15 @@
 
 #define min(a, b) ((a) < (b) ? (a) : (b))
 
+static time_t last_modtime;
+
 // The attributes should come from the directory entry.
 // TODO: [DIR_ENTRY] add last "m"odification time to the entry and handle it
 // properly
 static int do_getattr(const char *path, struct stat *st) {
-  //	printf( "[getattr] Called\n" );
-  //	printf( "\tAttributes of %s requested\n", path );
+
+  	printf( "[getattr] Called\n" );
+  	printf( "\tAttributes of %s requested\n", path );
 
   // GNU's definitions of the attributes
   // (http://www.gnu.org/software/libc/manual/html_node/Attribute-Meanings.html):
@@ -56,15 +59,19 @@ static int do_getattr(const char *path, struct stat *st) {
                          // mounted the filesystem
   st->st_gid = getgid(); // The group of the file/directory is the same as the
                          // group of the user who mounted the filesystem
-  st->st_atime =
-      time(NULL); // The last "a"ccess of the file/directory is right now
-  st->st_mtime =
-      time(NULL); // The last "m"odification of the file/directory is right now
+  st->st_atime =time(NULL); // The last "a"ccess of the file/directory is right now
+  //st->st_mtime =time(NULL); // The last "m"odification of the file/directory is right now
+
+  time_t mod_time = time( NULL );
+	st->st_mtime = mod_time;
 
   if (strcmp(path, "/") == 0) {
+    printf("Called root\n");
     st->st_mode = S_IFDIR | 0755;
     st->st_nlink = 2; // Why "two" hardlinks instead of "one"? The answer is
                       // here: http://unix.stackexchange.com/a/101536
+    st->st_mtime = last_modtime;
+
   } else {
     st->st_mode = S_IFREG | 0644;
     st->st_nlink = 1;
@@ -80,8 +87,13 @@ static int do_getattr(const char *path, struct stat *st) {
       printf("  -- %d > %.*s\n", di, FS_NAME_LEN, de->name);
       st->st_size = de->size_bytes;
       st->st_mode = de->mode;
+      st->st_mtime = de->modtime;
+			if(de->modtime > last_modtime){
+				last_modtime = de->modtime;
+			}
     } else {
       printf("  -- find_dir_entry cannot find %s\n", fn);
+      
       // this could be a new file. let it through?
       return -ENOENT; // no such file or dir
     }
@@ -207,6 +219,8 @@ static int do_write(const char *path, const char *buffer, size_t size,
     }
     // update the size of the file
     de->size_bytes = offset + size;
+    de->modtime = time( NULL );
+
 
     // flush back the directory, since the file info changed
     save_directory();
@@ -316,30 +330,91 @@ static int do_truncate(const char *path, off_t offset) {
     de->size_bytes = 0;
 
     // TODO: [TRUNC_FREE] also free the blocks of this file!
-    // load block map
-    // while(de->first_block != EOF_BLOCK) {
-    // freeBlock()
-    //	de->first_block = bmap.blockmap[de->first_block];
-    // }
-    // save block map
+    load_blockmap();
+    while(de->first_block != EOF_BLOCK) {
+    	de->first_block = free_block(de->first_block);
+    }
+    save_blockmap();
 
     // for now just cut loose all blocks! block leak!
-    de->first_block = EOF_BLOCK;
+    //de->first_block = EOF_BLOCK;
     // must save directory changes to disk!
     save_directory();
   }
   return 0;
 }
+// TODO: [REMOVE] implement this!
+static int do_unlink(const char *path) {
+  printf("--> Trying to remove %s\n", path);
+  load_directory();
+
+	// Find last file entry to move into emptied file space
+	int to_move_id = find_last_occupied_dir_entry();
+	short to_move = 1;
+	if(to_move_id < 0){
+		to_move = 0;
+	}
+
+	const char* fn = &path[1];
+	int file_id = find_dir_entry(fn);
+	if(file_id < 0){
+		return -ENOENT;
+	}
+
+	do_truncate(path, 0);
+
+	dir_entry* rm_file_de = index2dir_entry(file_id);
+	dir_entry* mv_file_de;
+
+	printf("File to remove: %d, File to replace with: %d\n", file_id, to_move_id);
+
+	if(to_move && to_move_id != file_id){
+		mv_file_de = index2dir_entry(to_move_id);
+
+		// Move dir_entry from last occupied dir_entry to evicted files place
+		// to ensure no gaps in dir_entry structure
+		strncpy(rm_file_de->name, mv_file_de->name, FS_NAME_LEN);
+		rm_file_de->mode = mv_file_de->mode;
+		rm_file_de->size_bytes = mv_file_de->size_bytes;
+		rm_file_de->first_block = mv_file_de->first_block;
+		rm_file_de->modtime = mv_file_de->modtime;
+
+		// Remove now duplicate dir_entry from file system
+	} else {
+			mv_file_de = rm_file_de;
+	}
+	mv_file_de->name[0] = 0;
+	mv_file_de->mode = 0;
+	mv_file_de->size_bytes = 0;
+	mv_file_de->first_block = EOF_BLOCK;
+	mv_file_de->modtime = 0;
+
+	save_directory();
+  return 0; // reports success, but does nothing
+}
 
 // TODO: [RENAME] implement this!
 static int do_rename(const char *opath, const char *npath) {
   printf("--> Trying to rename %s to %s\n", opath, npath);
-  return 0; // reports success, but does nothing
-}
+  const char* new_fn = &npath[1];
+	int new_file_id = find_dir_entry(new_fn);
+	printf("------------------------------------------New file id is: %d\n", new_file_id);
+	if(new_file_id > 0){
+		do_unlink(npath);
+	}
 
-// TODO: [REMOVE] implement this!
-static int do_unlink(const char *path) {
-  printf("--> Trying to remove %s\n", path);
+	const char* old_fn = &opath[1];
+	int old_file_id = find_dir_entry(old_fn);
+	if(old_file_id < 0){
+		// printf("No such file to rename: %s\n", fn);
+		return -ENOENT;
+	}
+
+	dir_entry* file_de = index2dir_entry(old_file_id);
+	strncpy(file_de->name, &npath[1], FS_NAME_LEN);
+	save_directory();
+	printf("Renamed \"%s\" to \"%s\" ", &opath[1], &npath[1]);
+	fflush(stdout);
   return 0; // reports success, but does nothing
 }
 
@@ -369,6 +444,8 @@ static int do_create(const char *path, mode_t m, struct fuse_file_info *ffi) {
   de->mode = m; // S_IFREG | 0644;
   de->size_bytes = 0;
   de->first_block = EOF_BLOCK; // end of file block
+  de->modtime = time( NULL ); // SET modtime TO CREATION TIME
+
 
   // must save directory changes to disk!
   save_directory();
