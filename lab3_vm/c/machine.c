@@ -110,7 +110,6 @@ static void read_page(unsigned phys_page, unsigned swap_page) {
 static void write_page(unsigned phys_page, unsigned swap_page) {
   memcpy(&swap[swap_page * PAGESIZE], &memory[phys_page * PAGESIZE],
          PAGESIZE * sizeof(unsigned));
-  diskWrites++;
   //printf("( page number writen %u )\n",phys_page);
 }
 
@@ -159,20 +158,15 @@ static unsigned find_furthest_page() {
   unsigned furthest_page = 0;
 
   for (size_t index = 0; index <= RAM_PAGES; index++) {
-    printf("RAM_PAGES: %d\n", RAM_PAGES);
-    printf("index: %lu\n", index);
     page = page_memory[index];
-    printf("current_access: %llu\n", current_access);
     for (size_t access = current_access - 1; access < num_access; access++) {
       if (access == num_access - 1 && page_accesses[access] != page) {
-        printf("line 165:");
+        printf("index: %lu\n", index);
         return index;
-      }
-      if(access>209){
-        printf("access: %lu\n", access);
       }
       if (page_accesses[access] == page) {
         printf("access: %lu\n", access);
+        printf("furthest_pos: %u\n", furthest_pos);
         if(access < furthest_pos) {
           break;
         }
@@ -182,7 +176,6 @@ static unsigned find_furthest_page() {
       }
     }
   }
-  printf("Hi");
   printf("furthest page: %u\n", furthest_page);
   return furthest_page;
 }
@@ -191,7 +184,6 @@ static unsigned optimal_replace() {
   for (size_t i = 0; i < RAM_PAGES; ++i) {
     if (page_memory[i] == -1) return i;
   }
-  printf("Furthest page: %u\n", find_furthest_page());
   return find_furthest_page();
 }
 
@@ -298,6 +290,7 @@ static void write_memory(unsigned *memory, unsigned addr, unsigned data) {
   translate(addr, &phys_addr, true);
 
   memory[phys_addr] = data;
+  diskWrites++;
 }
 
 void read_program(char *file, unsigned memory[], int *ninstr) {
