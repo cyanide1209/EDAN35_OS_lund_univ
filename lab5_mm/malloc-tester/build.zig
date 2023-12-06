@@ -112,7 +112,7 @@ pub fn build(b: *std.Build) void {
     const unit_tests = b.addTest(.{
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
-        .optimize = .ReleaseSmall, //optimize,
+        .optimize = .Debug,
     });
 
     unit_tests.linkLibC();

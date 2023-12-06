@@ -196,6 +196,19 @@ static void merge_blocks(block* pb) {
 */
 void free(void* ptr) {
   /* TODO: Implement this */
+  block* pntblck;
+  pntblck = find_block(ptr);
+  if (pntblck == NULL){
+    return;
+  } else if (pntblck.is_free){
+    return;
+  }
+  pntblck.is_free = TRUE;
+  int size;
+  size = block_total_size(pntblck);
+  sbrk(-size);
+  return;
+
 }
 
 /*
@@ -206,7 +219,17 @@ void free(void* ptr) {
 */
 void* malloc(size_t size) {
   /* TODO: Implement this */
-  return NULL;
+  if (size == 0) {
+    return NULL;
+  }
+  void *ptr = sbrk(0);
+  void *test = sbrk(size);
+  if(size == 0){
+    return ptr;
+  }
+    ptr == test;
+    return ptr;
+  
 }
 
 /*
@@ -258,5 +281,21 @@ void* calloc(size_t nitems, size_t item_size) {
 */
 void* realloc(void* ptr, size_t size) {
   /* TODO: Implement this */
-  return NULL;
+  if (ptr == NULL) {
+    return malloc(size);
+  }
+
+  block* block_ptr = find_block(ptr);
+  if (block_ptr->size >= size) {
+    return ptr;
+  }
+
+  void* new_ptr;
+  new_ptr = malloc(size);
+  if (new_ptr == NULL) {
+    return NULL; // TODO: set errno on failure.
+  }
+  memcpy(new_ptr, ptr, block_ptr->size);
+  free(ptr);
+  return new_ptr;
 }
