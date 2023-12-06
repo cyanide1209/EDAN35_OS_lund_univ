@@ -330,15 +330,14 @@ static int do_truncate(const char *path, off_t offset) {
     de->size_bytes = 0;
 
     // TODO: [TRUNC_FREE] also free the blocks of this file!
-    // load block map
-    // while(de->first_block != EOF_BLOCK) {
-    // freeBlock()
-    //	de->first_block = bmap.blockmap[de->first_block];
-    // }
-    // save block map
+    load_blockmap();
+    while(de->first_block != EOF_BLOCK) {
+    	de->first_block = free_block(de->first_block);
+    }
+    save_blockmap();
 
     // for now just cut loose all blocks! block leak!
-    de->first_block = EOF_BLOCK;
+    //de->first_block = EOF_BLOCK;
     // must save directory changes to disk!
     save_directory();
   }
