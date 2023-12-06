@@ -84,6 +84,30 @@ int find_dir_entry(const char *path) {
     return -1;
   else
     return di;
+}\
+
+// this function finds the last directory block containing an entry.
+// The return values are as follows:
+// if >0 the return value is the index in the directory entry while bdir
+// and bdir_id (global vars) ``refer to the block containing the entry
+// if -1 the entry could not be found
+// FIXME: this assumes a flat structure now, where all files are in the root
+// directory. For a more generic FS, it should allow subdirectories. To handle
+// this, one would need to identify dirs top-down and read the right blocks
+// from the disk. Useful functions: strsep, strdup, strcmp
+int find_last_occupied_dir_entry() {
+  // now find the file
+  unsigned short di = 0;
+  // while not all entries inspected
+  while(di < DIR_ENTRIES_PER_BLOCK){
+    if(dir_entry_is_empty(bdir.directory[di++])){
+      di -= 2;
+      break;
+    }
+  }
+  if(di < 0 || di == DIR_ENTRIES_PER_BLOCK ||
+     dir_entry_is_empty(bdir.directory[di])) return -1;
+  else return di;
 }
 
 // Finds the first empty entry, after all the existing

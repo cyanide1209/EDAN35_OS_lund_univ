@@ -81,6 +81,7 @@ typedef union fs_block_t {
 #define dir_entry_is_empty(d) (d.name[0] == 0)
 int load_directory();
 int find_dir_entry(const char *path);
+int find_last_occupied_dir_entry();
 int first_empty_dir_entry();
 dir_entry *index2dir_entry(unsigned short);
 void save_directory();
