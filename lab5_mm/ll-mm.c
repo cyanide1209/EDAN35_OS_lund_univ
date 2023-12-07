@@ -196,14 +196,24 @@ static void merge_blocks(block* pb) {
 */
 void free(void* ptr) {
   /* TODO: Implement this */
-  
-  block* pntblck;
-  pntblck = find_block(ptr);
+  block* p;
+  p = first;
   if (pntblck == NULL){
     return; 
   } else if (pntblck->is_free){
     return;
   }
+
+  while(block_data_size(p->next) != block_data_size(data_to_block(ptr))){
+      p = p->next;
+  }
+  block* pntblck;
+  pntblck = find_block(ptr);
+
+  block* pblck;
+  pblck = find_block(p);
+
+  pblck->next = pntblck->next;
   pntblck->is_free = 1;
   int size;
   size = block_total_size(pntblck);
@@ -222,10 +232,13 @@ void* malloc(size_t size) {
   /* TODO: Implement this */
   block* p;
   p = first;
-  while(p != NULL)
+  if(p != NULL){
+    while(p->next != NULL){
+      p = p->next;
+    }
+  }
   block* block_ptr = new_block(size);
-  //find old block'
-  //old block-> next = blockptr
+  p->next = block_ptr;
   block_ptr->is_free=1;
   return block_to_data(block_ptr);
   
@@ -282,6 +295,10 @@ void* realloc(void* ptr, size_t size) {
    
   if (ptr == NULL) {
     return malloc(size);
+  }
+
+  if (size == 0){
+    return free(ptr);
   }
 
   block* block_ptr = find_block(ptr);
