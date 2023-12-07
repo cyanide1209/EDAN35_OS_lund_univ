@@ -226,8 +226,8 @@ void* malloc(size_t size) {
     first = block_ptr;
     return block_to_data(block_ptr);
   }
-  block_ptr->next = p->next;
-  p->next = block_ptr;
+  //block_ptr->next = p->next;
+  //p->next = block_ptr;
 
   //while(p->next != sbrk(0)){
   //  p = p->next;
@@ -308,5 +308,7 @@ void* realloc(void* ptr, size_t size) {
   if (new_ptr == NULL) {
     return NULL; 
   }
+  memcpy(new_ptr, ptr, size);
+  free(ptr);
   return new_ptr;
 }
