@@ -225,6 +225,9 @@ static int do_write(const char *path, const char *buffer, size_t size,
   unsigned short *bmap = load_blockmap();
 
   // do we need to extend the file size?
+  int x = offset + size - de->size_bytes;
+  x= x/512;
+  x--;
   if (offset + size > de->size_bytes) {
     // file needs to grow
     printf("   file needs to grow by %lu bytes\n",
@@ -238,9 +241,17 @@ static int do_write(const char *path, const char *buffer, size_t size,
         return -ENOSPC;
       }
     }
-    // update the size of the file
+    //update the size of the file
+    for(int i = 0; i < x; i++){
+      unsigned short current_block = de->first_block;
+      while(current_block != EOF_BLOCK){
+        current_block = bmap[current_block];
+      }
+      current_block = alloc_block();
+    }  
+    
     de->size_bytes = offset + size;
-    alloc_block(1);
+    
     de->modtime = time(NULL);
 
 
@@ -349,19 +360,38 @@ static int do_truncate(const char *path, off_t offset) {
     printf("  > file exits. truncate it.");
 
     dir_entry *de = index2dir_entry(di);
-    de->size_bytes = offset;
+
 
     // TODO: [TRUNC_FREE] also free the blocks of this file!
-    load_blockmap();
-    //unsigned short* bmap = load_blockmap();
+    //load_blockmap();
+    unsigned short* bmap = load_blockmap();
     //de->first_block = bmap[offset];
-    while(de->first_block != EOF_BLOCK) {
-    	de->first_block = free_block(de->first_block);
+    unsigned short current_block = de->first_block;
+
+    if(offset>de->size_bytes){
+      int x = offset - de->size_bytes;
+      x = x/512;
+      for(int i = 0; i < x; i++){
+        while(current_block != EOF_BLOCK){
+          current_block = bmap[current_block];
+        }
+        current_block = alloc_block();
+      } 
     }
+
+    else if(offset<de->size_bytes){
+      while(de->first_block != EOF_BLOCK) {
+    	  de->first_block = free_block(de->first_block);
+      }
+    }
+
+    de->size_bytes = offset;
+
+    
     save_blockmap();
 
     // for now just cut loose all blocks! block leak!
-    de->first_block = EOF_BLOCK;
+    //bde->first_block = EOF_BLOCK;
     // must save directory changes to disk!
     save_directory();
   }

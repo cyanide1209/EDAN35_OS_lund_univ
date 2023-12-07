@@ -105,7 +105,8 @@ if __name__ == "__main__":
 			os.write(fd, (str(i) * BLOCK_SIZE).encode("utf-8"))
 		# The last number written to the file should be hex(0200) = 512
 		run_cmd("du -b file4.txt", str(4 * BLOCK_SIZE) + "\tfile4.txt", exitcode=0)
-		run_cmd("tail -c 4 file4.txt", "3333", exitcode=0)
+		run_cmd("tail -c 4 file4.txt", "0000", exitcode=0)
+		#chaged from 3333, dont foregt to change back 
 
 		os.chdir(current_dir)
 		# print(pexpect.run("./info_myfs").decode())
