@@ -206,114 +206,139 @@ static int do_read(const char *path, char *buffer, size_t size, off_t offset,
 // several blocks. fix that.
 static int do_write(const char *path, const char *buffer, size_t size,
                     off_t offset, struct fuse_file_info *fi) {
-  printf("--> Trying to write %s, %ld, %zu\n", path, offset, size);
+    printf("--> Trying to write %s, %ld, %zu\n", path, offset, size);
 
-  // let's figure out the dir entry
-  // skip the "/" in the begining
-  const char *fn = &path[1];
-  // let's figure out the dir entry for the path
-  load_directory();
-  int di = find_dir_entry(fn);
+    // let's figure out the dir entry
+    // skip the "/" in the beginning
+    const char *fn = &path[1];
+    // let's figure out the dir entry for the path
+    load_directory();
+    int di = find_dir_entry(fn);
 
-  if (di < 0) { // no such file
-    printf("    no such file\n");
-    return -ENOENT;
-  }
-  dir_entry *de = index2dir_entry(di);
+    if (di < 0) { // no such file
+        printf("    no such file\n");
+        return -ENOENT;
+    }
+    dir_entry *de = index2dir_entry(di);
 
-  // load the block map
-  unsigned short *bmap = load_blockmap();
+    // load the block map
+    unsigned short *bmap = load_blockmap();
 
-  // do we need to extend the file size?
-  int x = offset + size - de->size_bytes;
-  x= x/512;
-  x--;
-  if (offset + size > de->size_bytes) {
+    // do we need to extend the file size?
+    int x = offset + size - de->size_bytes;
+    x = x / BLOCK_SIZE;
+    x--;
+    if (offset + size > de->size_bytes) {
     // file needs to grow
     printf("   file needs to grow by %lu bytes\n",
            offset + size - de->size_bytes);
+
     // allocate blocks and write it
     if (de->first_block == EOF_BLOCK) {
-      // this is an empty file! start by allocating a new block
-      de->first_block = alloc_block();
-      if (de->first_block == EOF_BLOCK) {
-        printf("   no more free blocks!\n");
-        return -ENOSPC;
-      }
+        // this is an empty file! start by allocating a new block
+        de->first_block = alloc_block();
+        if (de->first_block == EOF_BLOCK) {
+            printf("   no more free blocks!\n");
+            return -ENOSPC;
+        }
     }
-    //update the size of the file
-    for(int i = 0; i < x; i++){
-      unsigned short current_block = de->first_block;
-      while(current_block != EOF_BLOCK){
-        current_block = bmap[current_block];
-      }
-      current_block = alloc_block();
-    }  
-    
-    de->size_bytes = offset + size;
-    
-    de->modtime = time(NULL);
 
+    // navigate to the last block
+    unsigned short last_block = de->first_block;
+    while (bmap[last_block] != EOF_BLOCK) {
+        last_block = bmap[last_block];
+    }
+
+    size_t additional_blocks = (offset + size - de->size_bytes + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    for (size_t i = 0; i < additional_blocks; i++) {
+        // Allocate a new block
+        unsigned short new_block = alloc_block();
+        if (new_block == EOF_BLOCK) {
+            printf("   no more free blocks!\n");
+            return -ENOSPC;
+        }
+        // Link the new block
+        bmap[last_block] = new_block;
+        last_block = new_block;
+    }
+
+    de->size_bytes = offset + size; // Move this line here
+
+    de->modtime = time(NULL);
 
     // flush back the directory, since the file info changed
     save_directory();
-  }
-  // first figure out where the write starts (offset in blocks)
-  unsigned short blkoffs = offset / BLOCK_SIZE;
-  // offset within that block
-  unsigned short byteoffs = offset % BLOCK_SIZE;
-  // how many bytes to write in this block
-  unsigned short crtsize = min(size, BLOCK_SIZE - byteoffs);
+}
 
-  // Depending on how the blocks in a files are organized, blkoffs needs to
-  // be mapped to a physical disk block. 3rd block in a contiguous mapped file
-  // means the third block in line from the first block. For a file allocated
-  // as a linked list of blocks, this is something like this:
-  unsigned short crtblk = de->first_block;
-  // navigate to the proper block
-  while (blkoffs) {
-    // not yet in the right block.
-    if (bmap[crtblk] != EOF_BLOCK) {
-      // follow the link
-      crtblk = bmap[crtblk];
-    } else {
-      // past the ends of the blocks, need to allocate a new one
-      unsigned short nblk = alloc_block();
-      if (nblk == EOF_BLOCK) {
-        // cannot allocate more, failed
-        printf("   out of free blocks!\n");
-        return -ENOSPC;
-      }
-      // add the new block to the list
-      bmap[crtblk] = nblk;
-      // advance to it
-      crtblk = nblk;
+    // first figure out where the write starts (offset in blocks)
+    unsigned short blkoffs = offset / BLOCK_SIZE;
+    // offset within that block
+    unsigned short byteoffs = offset % BLOCK_SIZE;
+
+    // New code to handle writes extending over several blocks
+    unsigned short crtsize = size;  // Initialize with the full size
+
+    // Depending on how the blocks in a file are organized
+    unsigned short crtblk = de->first_block;
+    while (blkoffs) {
+        // not yet in the right block.
+        if (bmap[crtblk] != EOF_BLOCK) {
+            // follow the link
+            crtblk = bmap[crtblk];
+        } else {
+            // past the ends of the blocks, need to allocate a new one
+            unsigned short nblk = alloc_block();
+            if (nblk == EOF_BLOCK) {
+                // cannot allocate more, failed
+                printf("   out of free blocks!\n");
+                return -ENOSPC;
+            }
+            // add the new block to the list
+            bmap[crtblk] = nblk;
+            // advance to it
+            crtblk = nblk;
+        }
+        blkoffs--;
     }
-    blkoffs--;
-  }
-  // here crtblk should point to the right block
-  printf(" --: start writing at block %u", crtblk);
+    // here crtblk should point to the right block
+    printf(" --: start writing at block %u\n", crtblk);
 
-  char bcache[BLOCK_SIZE];
-  // reads the block into the cache
-  readBlock(crtblk, bcache);
-  // modifies it by writing some bytes from the buffer
-  // TODO: [LARGE_WRITE] this only writes one block! needs to be modified to
-  // write all, if there are more than 1. Consider a while loop around this.
-  // Consider also allocating all new blocks from the start, and then come
-  // back to write them.
-  memcpy(bcache + byteoffs, buffer, crtsize);
-  // write it back
-  writeBlock(crtblk, bcache);
+    char bcache[BLOCK_SIZE];
 
-  // ... //
-  // make sure to update the blockl map
-  save_blockmap();
+    while (crtsize > 0) {
+        size_t write_size = (size > BLOCK_SIZE - byteoffs) ? BLOCK_SIZE - byteoffs : size;
 
-  // how much did we write? lie here to get this running for one block
-  // TODO: [LARGE_WRITE] must make sure to write the full size bytes, which
-  // might mean several blocks
-  return size;
+        // reads the block into the cache
+        readBlock(crtblk, bcache);
+        // modifies it by writing some bytes from the buffer
+        memcpy(bcache + byteoffs, buffer + (size - crtsize), write_size);
+        // write it back
+        writeBlock(crtblk, bcache);
+
+        // Move to the next block
+        if (bmap[crtblk] == EOF_BLOCK) {
+            // Allocate a new block
+            unsigned short nblk = alloc_block();
+            if (nblk == EOF_BLOCK) {
+                printf("   out of free blocks!\n");
+                return -ENOSPC;
+            }
+            bmap[crtblk] = nblk;
+        }
+        crtblk = bmap[crtblk];
+
+        // Update offsets and remaining size
+        byteoffs = 0;
+        crtsize -= write_size;
+    }
+
+    // make sure to update the block map
+    save_blockmap();
+
+    // TODO: [LARGE_WRITE] must make sure to write the full size bytes, which
+    // might mean several blocks
+    return size;
 }
 
 // Called when the FS is dismounted
